@@ -54,11 +54,13 @@ classdef S300
             o = x(1:2)';
             Dl = [   1e3*cos(At);
                        1e3*sin(At)];
-            for v = 1:length(At)
+            Da = zeros(1, length(At));
+            envL = env.L;
+            parfor v = 1:length(At)
                 d = o + Dl(:,v);           
                 X  = [];
-                for oi=1:length(env.L)
-                    L = env.L{oi};
+                for oi=1:length(envL)
+                    L = envL{oi};
                     [x, y] = polyxpoly([o(1); d(1)], [o(2); d(2)], L(:,1), L(:,2));         
                     Xt = [x y];
                     Xt(~any(isnan(Xt),2),:);
@@ -71,11 +73,12 @@ classdef S300
                     N(i) = norm(X1(i,:));
                 end
                 [vn, idx] = min(N);
-                obj.D(v) = vn;
-
+%                 obj.D(v) = vn;
+                Da(v) = (vn);
             end                         
-            N = obj.sigma * randn(size(obj.D, 1), size(obj.D, 2));
-            obj.D = obj.D + N;
+%             N = obj.sigma * randn(size(obj.D, 1), size(obj.D, 2));
+%             obj.D = obj.D + N;
+            obj.D = Da;
         end
 
         

@@ -7,8 +7,8 @@ classdef Robot
         rearScanner;        
         frontScannerPosition = [ 0.5 0.5 -pi/2];
         rearScannerPosition = [ -0.5 -0.5 pi/2];
-         %scannerRes = [deg2rad(.5), 3*pi/2];
-        scannerRes = [10*deg2rad(.5), 3*pi/2];
+        scannerRes = [deg2rad(.5), 3*pi/2];
+%         scannerRes = [10*deg2rad(.5), 3*pi/2];
         SH = [0.5 0.5;
                   0.5 -0.5;
                   -0.5 -0.5;            
