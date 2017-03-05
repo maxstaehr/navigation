@@ -6,18 +6,29 @@ classdef ScanMatcher
         submapnx = 4;
         submapny = 4;
         initialSearchStep = 5*[0.1 0.1 deg2rad(3)]';
-        maxIterations = 20;
+        maxIterations = 15;
         sig1 = -1;
     end
     
     methods
         
-        function obj = ScanMatcher()
+        function obj = ScanMatcher(iS, nx, ny)
+            obj.initialSearchStep = iS;
+            obj.submapnx = nx;
+            obj.submapny = ny;
         end
         
         %% SCAN Matcher
         % macht den Scan gegen die Karte
         function bestPose =  matchScan(obj, xinit,PCL, map)
+            
+            
+            
+            if ~map.hasData
+                bestPose = xinit;
+                return;
+            end
+                
             
             bestPose = xinit;
             bestScore = obj.generateScore(xinit, PCL, map);
@@ -42,7 +53,7 @@ classdef ScanMatcher
                     bestScore  = maxMoveScore;
                     bestPose = bestMovePose;
                 else
-                    searchStep = searchStep/2;
+                    searchStep = 0.5*searchStep;
                     iterations = iterations + 1;
                 end
                 
@@ -75,14 +86,13 @@ classdef ScanMatcher
             [XID, YID] = map.getID(XPOS, YPOS);
             
             score = 0;
-            S = zeros(length(XID), 1);
+            S = nan(length(XID), 1);
             parfor i=1:length(XID)
                 s = [XPOS(i) YPOS(i)]';
-                SM = map.getSupMap(XID(i), YID(i), obj.submapnx, obj.submapny);
+                SM = nan(4,(obj.submapnx+1)*(obj.submapny+1));
+                SM = map.getSupMap(XID(i), YID(i), obj.submapnx, obj.submapny, SM);
                 try
-                    if isempty(SM)
-                        continue;
-                    end
+
                     P = SM(3,:) ./ SM(4,:);
                     [v, idx] = max(P);
                     if isnan(v)
@@ -99,9 +109,8 @@ classdef ScanMatcher
                     disp(ME);
                 end
 
-            end
-            Ss = cumsum(S);
-            score = Ss(end);
+            end            
+            score =nanmean(S);
             
         end
         

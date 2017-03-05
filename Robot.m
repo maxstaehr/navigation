@@ -18,14 +18,23 @@ classdef Robot
           NNeighbours = 5;
           NB;
           currentX = zeros(1,3);
+          ANGLE = [];
+          
           
           
     end
     
     methods
-        function obj = Robot()
+        function obj = Robot(superSamplingFaktor)
             obj.frontScanner = S300(obj.scannerRes(1), obj.scannerRes(2));            
-            obj.rearScanner = S300(obj.scannerRes(1), obj.scannerRes(2));                                            
+            obj.rearScanner = S300(obj.scannerRes(1), obj.scannerRes(2));           
+            
+            da = obj.scannerRes(1)/superSamplingFaktor;
+            
+
+          obj.ANGLE = linspace(da, obj.scannerRes(1)-da, superSamplingFaktor);
+          obj.ANGLE = obj.ANGLE - obj.scannerRes(1)/2;
+
         end
         
         function xr = getFrontLaserTransformation(obj)
@@ -76,6 +85,37 @@ classdef Robot
             v2 = bsxfun(@plus, v1, obj.currentX(1:2));
             xr = [v2'  obj.currentX(3)+obj.rearScannerPosition(3)];                        
             obj.rearScanner = obj.rearScanner.raytrace(env, xr);
+        end
+        
+        function PCL = generateGlobalPCL(robot)
+            xf = robot.getFrontLaserTransformation();
+            xr = robot.getRearLaserTransformation();
+                  
+            PCL = zeros(2*length(robot.ANGLE), 2);
+            index = 1;
+            At = robot.frontScanner.A + xf(3);
+            for i=1:length(At)
+                for j=1:length(robot.ANGLE)
+                    XPOS = robot.frontScanner.D(i) *cos(At(i)+robot.ANGLE(j)) + xf(1);
+                    YPOS = robot.frontScanner.D(i) *sin(At(i)+robot.ANGLE(j)) + xf(2);
+                     PCL(index, :) = [XPOS YPOS];
+                     index = index+1;
+                end
+            end
+            At = robot.rearScanner.A + xr(3);
+            for i=1:length(At)
+                for j=1:length(robot.ANGLE)
+                    XPOS = robot.rearScanner.D(i)*cos(At(i)+robot.ANGLE(j)) + xr(1);
+                    YPOS = robot.rearScanner.D(i)*sin(At(i)+robot.ANGLE(j)) + xr(2);
+                     PCL(index, :) = [XPOS YPOS];
+                     index = index+1;
+                end
+            end
+
+%             At = robot.rearScanner.A + xr(3);
+%             XPOS = robot.rearScanner.D .*cos(At) + xr(1);
+%             YPOS = robot.rearScanner.D .*sin(At) + xr(2);
+%             PCL = vertcat(PCL, [XPOS' YPOS']);                 
         end
         
         

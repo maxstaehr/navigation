@@ -41,93 +41,144 @@ env = Environment(LL);
 
 
 
-robot = Robot();
-sm = ScanMatcher();
 
 
 
 
 
 
-close all;figure; hold on; grid on; axis equal;
-ax = gca;
-env.plot(ax);
-figure; hold on; grid on; axis equal;
+
+
+close all;subplot(2,2,1); hold on; grid on; axis equal;
+ax_env = gca;
+env.plot(ax_env);
+subplot(2,2,2); hold on; grid on; axis equal;
 ax_map = gca;
-figure; hold on; grid on; axis equal;
+subplot(2,2,3); hold on; grid on; axis equal;
 ax_prob = gca;
+subplot(2,2,4); hold on; grid on; 
+ax_error = gca;
+% figure; hold on; grid on; axis equal;
+% ax_prob = gca;
 
-
+%% Grid map
+% grid map
 tm = GridMap(-50, 20,-20, 35, 0.5, deg2rad(0.5));
+robot = Robot(tm.superSamplingFaktor);
+
+
 tmax = 15;
 tdelta = 0.05;
-T = 0:tdelta:tmax;
-Y = T*2-10;
+MatchingZyklen = 20;
+T = 0:MatchingZyklen*tdelta:tmax;
+
+maxVelTrans = 2.0;
+maxVelRot = 2*pi/4;
+errorFaktorTrans = 0.1;
+errorFaktorRot = 0.01;
+
+deltaSigmaTrans = errorFaktorTrans*maxVelTrans/6;
+deltaSigmaRot = errorFaktorRot*maxVelRot/6;
+
+nx = ceil(6*deltaSigmaTrans/tm.xvoxelwidth);
+ny = ceil(6*deltaSigmaTrans/tm.xvoxelwidth);
+sm = ScanMatcher([6*deltaSigmaTrans 6*deltaSigmaTrans 6*deltaSigmaRot],nx, ny);
+
+Y = T*maxVelTrans-10;
 
 S = struct();
 S.fA = robot.frontScanner.A;
 S.rA = robot.rearScanner.A;
 
 D = cell(1,length(Y));
+N = [deltaSigmaTrans*randn(length(Y), 1) deltaSigmaRot*randn(length(Y), 1)];
+
+Err = [];
+NPOS = [];
 for i=1:length(Y)
-    robotPose = [0 Y(i) pi/2];
+    cla(ax_env);
+    cla(ax_map);
+    cla(ax_prob);
     
-    robot = robot.transform(pi/2, [0 Y(i)]');
+    %% Noise Berechnung
+    % es wird der Positionsfehler anhand der rauschenden 
+    % translatorischen und rotatorischen Geschwindigkeit berechnet
+    n = N(i,:);
+    dtheta = n(2)*tdelta*MatchingZyklen;
+    dtrans = n(1)*tdelta*MatchingZyklen;
+    dx = cos(pi/2+dtheta)*dtrans;
+    dy = sin(pi/2+dtheta)*dtrans;
+    npos = [dx dy dtheta];
+    
+%     npos = [dx dy 0];
+    
+%% Raytracing
+% raytraces the environment    
+    
+
+    robotPose = [0 Y(i) pi/2];        
+    robot = robot.transform(robotPose(3), robotPose(1:2)');
     robot = robot.raytrace(env);
+    PCL = robot.generateGlobalPCL();
+    h1 = env.plot(ax_env);
+    h2 = plot(ax_env, PCL(:,1), PCL(:,2), '.m');
     
-%     cla(ax);
-%     cla(ax_map);
-%     cla(ax_prob);
-%     cla(ax);
-%     
-    xf = robot.getFrontLaserTransformation();
-%     tm = tm. raytraceRayGrid(xf(1),xf(2),xf(3), robot.frontScanner.A, robot.frontScanner.D);
-    xr = robot.getRearLaserTransformation();
-%     tm = tm. raytraceRayGrid(xr(1),xr(2),xr(3), robot.rearScanner.A, robot.rearScanner.D);
-%     tm.plotProbabilityMap(ax_prob);
+
+    %% Scan Matching
+    % der Sca wird gegen die Karte auf dem letzen gemachtet    
+    % mit der gedachten position
+    %dabei der Scan durch die Positionsschätzung der Geschwindigkeits
+    %sensoren verrauscht
+    T = rot2(npos(3))*PCL';
+    T2 = bsxfun(@plus, T, [npos(1) npos(2)]');
+    PCLpos = T2';  
+    h3 = plot(ax_env, PCLpos(:, 1), PCLpos(:,2), 'xk');
     
-%     n = [0.05*randn 0.05*randn deg2rad(5)*randn];
-%     xf = xf + n;
-%     xr = xr + n;
+    cc = sm.matchScan([0 0 0], PCLpos, tm);    
+    T = rot2(cc(3))*PCLpos';
+    T2 = bsxfun(@plus, T, [cc(1) cc(2)]');
+    PCLcor = T2';     
+    h4 = plot(ax_env, PCLcor(:, 1), PCLcor(:,2), 'og');
+    legend(ax_env, [h1 h2 h3 h4], 'Ground truth', 'True Points', 'After Estimate', 'After Correction', 'Location','SouthWest');
     
-    s = struct();
-    s.fD = robot.frontScanner.D;
-    s.rD = robot.rearScanner.D;
-    s.xf = xf;
-    s.xr = xr;
-    D{end+1} = s;
+
     
-    
-    
-%     At = robot.frontScanner.A + xf(3);
-%     XPOS = robot.frontScanner.D .*cos(At) + xf(1);
-%     YPOS = robot.frontScanner.D .*sin(At) + xf(2);
-%     PCL = [XPOS' YPOS'];
-%     
-%     At = robot.rearScanner.A + xr(3);
-%     XPOS = robot.rearScanner.D .*cos(At) + xr(1);
-%     YPOS = robot.rearScanner.D .*sin(At) + xr(2);
-%     PCL = vertcat(PCL, [XPOS' YPOS']);
-%     axes(ax);
-%     env.plot(ax);
-%     plot(PCL(:, 1), PCL(:,2), 'xr');
-%     c = sm.matchScan([0 0 0], PCL, tm);
-%     
-%     
-%     T = rot2(c(3))*PCL';
-%     T2 = bsxfun(@plus, T, [c(1) c(2)]');
-%     T3 = T2';
-% 
-%     axes(ax);
-%     plot(T3(:, 1), T3(:,2), 'og');
-%   
-%     
-%     
-%     robot.plot(ax);
+    %% Map update
+    % updating the map    
+    % der erste Scan wird ohne Positionsfehler integriert
+    if i==1
+        tm = tm.raytraceRayGridPCL(robotPose(1:2), PCL);
+    else
+        tm = tm.raytraceRayGridPCL(robotPose(1:2), PCLcor);
+        
+            %% Berechnung des resultierenden Fehler
+            % 
+            NPOS  = vertcat(NPOS, npos);
+            e1 = rot2(npos(3))*[cc(1) cc(2)]';
+            err = bsxfun(@plus, e1 , [npos(1) npos(2)]');
+            errr = npos(3) + cc(3);
+            err3 = [err' errr];
+            Err = vertcat(Err, abs(err3));
+
+            h1 = plot(ax_error, Err(:,1), '-xr');
+            h2 = plot(ax_error, Err(:,2), '-xb');
+            h3 = plot(ax_error, Err(:,3), '-xk');
+            h4 = plot(ax_error, NPOS(:,1), '-or');
+            h5 = plot(ax_error, NPOS(:,2), '-ob');
+            h6 = plot(ax_error, NPOS(:,3), '-ok');            
+            legend(ax_error, [h1 h2 h3 h4 h5 h6], 'x', 'y', 'theta', 'x', 'y', 'theta',  'Location','SouthWest');
+    end
 %     tm.plotOccupancy(ax_map);
-%     tm.plotProbabilityMap(ax_prob);
+    tm.plotProbabilityMap(ax_prob);
+
+
+    
+    
+    
+
+    pause(1);
     disp(i);
 end
-save('laserScanData.mat', 'D', 'S');
+%save('laserScanData.mat', 'D', 'S');
 
 
