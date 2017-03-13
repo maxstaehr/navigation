@@ -6,7 +6,7 @@ classdef ScanMatcher
         submapnx = 4;
         submapny = 4;
         initialSearchStep = 5*[0.1 0.1 deg2rad(3)]';
-        maxIterations = 15;
+        maxIterations = 40;
         sig1 = -1;
     end
     
@@ -14,8 +14,8 @@ classdef ScanMatcher
         
         function obj = ScanMatcher(iS, nx, ny)
             obj.initialSearchStep = iS;
-            obj.submapnx = nx;
-            obj.submapny = ny;
+            obj.submapnx = min(3,nx);
+            obj.submapny = min(3,ny);
         end
         
         %% SCAN Matcher
@@ -53,7 +53,7 @@ classdef ScanMatcher
                     bestScore  = maxMoveScore;
                     bestPose = bestMovePose;
                 else
-                    searchStep = 0.5*searchStep;
+                    searchStep = 0.66*searchStep;
                     iterations = iterations + 1;
                 end
                 
@@ -95,13 +95,18 @@ classdef ScanMatcher
 
                     P = SM(3,:) ./ SM(4,:);
                     [v, idx] = max(P);
+                    idx = find(P>0.5);
                     if isnan(v)
                         continue;
                     end
                     xmax = SM(1,idx);
                     ymax = SM(2,idx);
-                    d = norm(s - [xmax ymax]');
-                    pe = exp(d^2/obj.sig1);
+                    d = Inf;
+                    for j=1:length(xmax)
+                        d = min(d, norm(s - [xmax(j) ymax(j)]'));
+                    end
+%                     d = norm(s - [xmax ymax]');
+                    pe = exp(-(d^2));
                     S(i) = pe;
                     %score = score + pe;
                     

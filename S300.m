@@ -5,7 +5,7 @@ classdef S300
     properties        
         A;
         D;
-        sigma = 0.01;
+        sigma =0;
     end
     
     methods
@@ -52,8 +52,8 @@ classdef S300
             
             At = obj.A+x(3);
             o = x(1:2)';
-            Dl = [   1e3*cos(At);
-                       1e3*sin(At)];
+            Dl = 100*[cos(At);
+                          sin(At)];
             Da = zeros(1, length(At));
             envL = env.L;
             parfor v = 1:length(At)
@@ -61,7 +61,7 @@ classdef S300
                 X  = [];
                 for oi=1:length(envL)
                     L = envL{oi};
-                    [x, y] = polyxpoly([o(1); d(1)], [o(2); d(2)], L(:,1), L(:,2));         
+                    [x, y] = polyxpoly([o(1); d(1)], [o(2); d(2)], L(:,1), L(:,2), 'unique');         
                     Xt = [x y];
                     Xt(~any(isnan(Xt),2),:);
                     X = vertcat(X, Xt);
@@ -74,10 +74,11 @@ classdef S300
                 end
                 [vn, idx] = min(N);
 %                 obj.D(v) = vn;
-                Da(v) = (vn);
+
+                Da(v) = vn;
             end                         
-%             N = obj.sigma * randn(size(obj.D, 1), size(obj.D, 2));
-%             obj.D = obj.D + N;
+            N = obj.sigma * randn(size(obj.D, 1), size(obj.D, 2));
+            Da = Da + N;
             obj.D = Da;
         end
 

@@ -5,8 +5,12 @@ classdef Robot
     properties
         frontScanner;
         rearScanner;        
-        frontScannerPosition = [ 0.5 0.5 -pi/2];
+        frontScannerPosition = [ 0.5 0.5 -pi/2];                
         rearScannerPosition = [ -0.5 -0.5 pi/2];
+        
+%         frontScannerPosition = [ 0 0 -pi/2];
+%         rearScannerPosition = [ 0 0 pi/2];
+        
         scannerRes = [deg2rad(.5), 3*pi/2];
 %         scannerRes = [10*deg2rad(.5), 3*pi/2];
         SH = [0.5 0.5;
@@ -28,13 +32,14 @@ classdef Robot
         function obj = Robot(superSamplingFaktor)
             obj.frontScanner = S300(obj.scannerRes(1), obj.scannerRes(2));            
             obj.rearScanner = S300(obj.scannerRes(1), obj.scannerRes(2));           
-            
-            da = obj.scannerRes(1)/superSamplingFaktor;
-            
 
-          obj.ANGLE = linspace(da, obj.scannerRes(1)-da, superSamplingFaktor);
-          obj.ANGLE = obj.ANGLE - obj.scannerRes(1)/2;
-
+            if superSamplingFaktor > 1
+              da = obj.scannerRes(1)/superSamplingFaktor;
+              obj.ANGLE = linspace(da, obj.scannerRes(1)-da, superSamplingFaktor);
+              obj.ANGLE = obj.ANGLE - obj.scannerRes(1)/2;
+            else
+                obj.ANGLE = [0];
+            end
         end
         
         function xr = getFrontLaserTransformation(obj)

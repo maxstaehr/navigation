@@ -20,6 +20,9 @@ classdef GridMap
         yvoxelwidth;
         superSamplingFaktor;
         deltaAngle;
+        XcoordInVoxel;
+        YcoordInVoxel;
+        WcoordInVoxel;
         
         hasData = false;
         
@@ -55,6 +58,10 @@ classdef GridMap
             [X, Y] = meshgrid(obj.xmin: obj.xvoxelwidth:obj.xmax, obj.ymin:obj.yvoxelwidth:obj.ymax);
             obj.ws_x = reshape(X,1,numel(X));
             obj.ws_y = reshape(Y,1,numel(Y));
+            
+            obj.XcoordInVoxel = 0*obj.ws_x;
+            obj.YcoordInVoxel= 0*obj.ws_x;
+            obj.WcoordInVoxel= 0*obj.ws_x;
             
             
             
@@ -104,7 +111,50 @@ classdef GridMap
             X = reshape(obj.ws_x, obj.ny,obj.nx);
             Y = reshape(obj.ws_y, obj.ny,obj.nx);
             Z = reshape(Z, obj.ny,obj.nx);
+
             surf(ax, X,Y,Z);           
+
+            
+%             Xoffset = reshape(obj.XcoordInVoxel, obj.ny,obj.nx);
+%             Yoffset = reshape(obj.YcoordInVoxel, obj.ny,obj.nx);
+%             
+%             Xresult = Xoffset + X;
+%             Yresult = Yoffset + Y;
+%             Xresult(Z < 0.1) = nan;
+%             Yresult(Z < 0.1) = nan;
+%             
+%             plot(ax, Xresult, Yresult, 'xm');
+            
+        end
+        
+        function [h h2] = plotWeightedVoxel(obj, ax)
+            
+            Z = zeros(1, obj.nx*obj.ny);
+            for i=1:length(Z)
+                if  obj.B(i) > 0
+                    Z(i) = obj.B(i) / obj.V(i);
+                end
+            end
+%             Z(Z==0) = nan;
+            X = reshape(obj.ws_x, obj.ny,obj.nx);
+            Y = reshape(obj.ws_y, obj.ny,obj.nx);
+            Z = reshape(Z, obj.ny,obj.nx);            
+            
+            Xoffset = reshape(obj.XcoordInVoxel, obj.ny,obj.nx);
+            Yoffset = reshape(obj.YcoordInVoxel, obj.ny,obj.nx);
+            
+            Xresult = Xoffset + X;
+            Yresult = Yoffset + Y;
+            Xresult(Z < 0.1) = nan;
+            Yresult(Z < 0.1) = nan;
+            X(Z < 0.1) = nan;
+            Y(Z < 0.1) = nan;
+            
+            
+            h = plot(ax, Xresult, Yresult, 'xb');
+            h2 = plot(ax, X, Y, 'xk');
+            h= h(1);
+            h2 = h2(1);
         end
         
         function [xid, yid] = getID(obj, xpos, ypos)
@@ -161,6 +211,7 @@ classdef GridMap
                 xpos = o(1);
                 ypos = o(2);
                 
+                endpoint = PCL(ray,:)';
                 dir = PCL(ray,:)' - o';
                 ndir = dir/norm(dir);
                 
@@ -211,6 +262,17 @@ classdef GridMap
                     obj.V(id) = obj.V(id)+ 1;                                        
                     if xidend == x && yidend == y
                         obj.B(id) = obj.B(id) + 1;
+                        
+                        
+                        deltaX = endpoint(1)-obj.ws_x(id);
+                        obj.XcoordInVoxel(id) = (obj.XcoordInVoxel(id)*obj.WcoordInVoxel(id) + deltaX)/(obj.WcoordInVoxel(id)+1);
+                        
+                        deltaY = endpoint(2)-obj.ws_y(id);
+                        obj.YcoordInVoxel(id) = (obj.YcoordInVoxel(id)*obj.WcoordInVoxel(id) + deltaY)/(obj.WcoordInVoxel(id)+1);                        
+                        
+
+                        obj.WcoordInVoxel(id)= obj.WcoordInVoxel(id)+1;
+                        
                         break;
                     end
 
@@ -317,8 +379,8 @@ classdef GridMap
             for x=xstart:xend
                 for y=ystart:yend
                     id = double((x-1)*obj.ny + (y-1) +1);           
-                    SM(1,index)=  obj.ws_x(id); 
-                    SM(2,index) = obj.ws_y(id); 
+                    SM(1,index)=  obj.ws_x(id)+obj.XcoordInVoxel(id); 
+                    SM(2,index) = obj.ws_y(id)+obj.YcoordInVoxel(id); 
                     SM(3,index) = obj.B(id); 
                     SM(4,index)=  obj.V(id);
                     index = index +1;
