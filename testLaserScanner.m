@@ -19,6 +19,15 @@ L = [-15 30 ;
         15 -15;
         15 30;
         -15 30];
+    
+% L = [        
+%     -15 30 ;
+%     
+%       -15 -15 ;
+%         15 -15;
+%         15 30;
+%         -15 30];
+%     
 
 LL{end+1} = L;
 
@@ -64,26 +73,26 @@ ax_error = gca;
 %% Grid map
 % grid map
 % tm = GridMap(-50, 20,-20, 35, 0.5, deg2rad(0.5));
-tm = GridMap(-50, 20,-20, 35, 0.1, deg2rad(0.5));
+tm = GridMap(-50, 20,-35, 35, 0.05, deg2rad(0.5));
 robot = Robot(tm.superSamplingFaktor);
 
 
-tmax = 15;
+tmax = 12;
 tdelta = 0.05;
 MatchingZyklen = 20;
 T = 0:MatchingZyklen*tdelta:tmax;
 
 maxVelTrans = 2.0;
 maxVelRot = 2*pi/10;
-errorFaktorTrans = 0.3;
-errorFaktorRot = 0.3;
+errorFaktorTrans = 0.03;
+errorFaktorRot = 0.03;
 
 deltaSigmaTrans = errorFaktorTrans*maxVelTrans/6;
 deltaSigmaRot = errorFaktorRot*maxVelRot/6;
 
 nx = ceil(6*deltaSigmaTrans/tm.xvoxelwidth);
 ny = ceil(6*deltaSigmaTrans/tm.xvoxelwidth);
-sm = ScanMatcher([6*deltaSigmaTrans 6*deltaSigmaTrans 6*deltaSigmaRot],nx, ny);
+sm = ScanMatcher(0.1*[deltaSigmaTrans deltaSigmaTrans deltaSigmaRot],nx, ny);
 
 Y = T*maxVelTrans-10;
 
@@ -109,7 +118,9 @@ for i=1:length(Y)
     dtrans = n(1)*tdelta*MatchingZyklen;
     dx = cos(pi/2+dtheta)*dtrans;
     dy = sin(pi/2+dtheta)*dtrans;
-    npos = [dx dy dtheta];
+%     dx = 3*deltaSigmaTrans;
+%     npos = [0 dx 0];
+     npos = [dx dy dtheta];
     
 %     npos = [dx dy 0];
     
@@ -134,12 +145,31 @@ for i=1:length(Y)
     T2 = bsxfun(@plus, T, [npos(1) npos(2)]');
     PCLpos = T2';  
     
-    
-    cc = sm.matchScan([0 0 0], PCLpos, tm);    
-    T = rot2(cc(3))*PCLpos';
-    T2 = bsxfun(@plus, T, [cc(1) cc(2)]');
-    PCLcor = T2';     
+    startPoses = [...
+        0 0 0;                
+%         -3*deltaSigmaTrans -3*deltaSigmaTrans -3*deltaSigmaRot;
+%         3*deltaSigmaTrans -3*deltaSigmaTrans -3*deltaSigmaRot;
+%         -3*deltaSigmaTrans 3*deltaSigmaTrans -3*deltaSigmaRot;
+%         3*deltaSigmaTrans 3*deltaSigmaTrans -3*deltaSigmaRot;
+%         -3*deltaSigmaTrans -3*deltaSigmaTrans 3*deltaSigmaRot;
+%         3*deltaSigmaTrans -3*deltaSigmaTrans 3*deltaSigmaRot;
+%         -3*deltaSigmaTrans 3*deltaSigmaTrans 3*deltaSigmaRot;
+%         3*deltaSigmaTrans 3*deltaSigmaTrans 3*deltaSigmaRot;                        
+];
+%     bestscore = 0;
+%     cc = [0 0 0];
+%     for j=1:size(startPoses)
+%         [ccc, score] = sm.matchScan(startPoses(1,:), PCLpos, tm);    
+%         if score > bestscore
+%             bestscore = score;
+%             cc = ccc;
+%         end
+%     end
 
+        [cc, score] = sm.matchScan(startPoses, PCLpos, tm);    
+        T = rot2(cc(3))*PCLpos';
+        T2 = bsxfun(@plus, T, [cc(1) cc(2)]');
+        PCLcor = T2';     
     
 
     
@@ -186,14 +216,14 @@ for i=1:length(Y)
     end
     %% SECTION TITLE
     % plotting result
-%     cla(ax_env); hold on;
-%     h1 = env.plot(ax_env);
-%     h2 = plot(ax_env, PCL(:,1), PCL(:,2), '.m');    
-%     h3 = plot(ax_env, PCLpos(:, 1), PCLpos(:,2), 'xk');
-%     h4 = plot(ax_env, PCLcor(:, 1), PCLcor(:,2), 'og');    
-%     [h5, h6] = tm.plotWeightedVoxel(ax_env);
-%     legend(ax_env, [h1 h2 h3 h4 h5 h6], 'Ground truth', 'True Points', 'After Estimate', 'After Correction', 'Weighted','Center','Location','SouthWest');    
-%     
+    cla(ax_env); hold on;
+    h1 = env.plot(ax_env);
+    h2 = plot(ax_env, PCL(:,1), PCL(:,2), '.m');    
+    h3 = plot(ax_env, PCLpos(:, 1), PCLpos(:,2), 'xk');
+    h4 = plot(ax_env, PCLcor(:, 1), PCLcor(:,2), 'og');    
+    [h5, h6] = tm.plotWeightedVoxel(ax_env);
+    legend(ax_env, [h1 h2 h3 h4 h5 h6], 'Ground truth', 'True Points', 'After Estimate', 'After Correction', 'Weighted','Center','Location','SouthWest');    
+    
 %     
 % %     tm.plotOccupancy(ax_map);
 %     

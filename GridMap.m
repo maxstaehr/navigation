@@ -263,15 +263,15 @@ classdef GridMap
                     if xidend == x && yidend == y
                         obj.B(id) = obj.B(id) + 1;
                         
-                        
-                        deltaX = endpoint(1)-obj.ws_x(id);
-                        obj.XcoordInVoxel(id) = (obj.XcoordInVoxel(id)*obj.WcoordInVoxel(id) + deltaX)/(obj.WcoordInVoxel(id)+1);
-                        
-                        deltaY = endpoint(2)-obj.ws_y(id);
-                        obj.YcoordInVoxel(id) = (obj.YcoordInVoxel(id)*obj.WcoordInVoxel(id) + deltaY)/(obj.WcoordInVoxel(id)+1);                        
-                        
-
-                        obj.WcoordInVoxel(id)= obj.WcoordInVoxel(id)+1;
+%                         
+%                         deltaX = endpoint(1)-obj.ws_x(id);
+%                         obj.XcoordInVoxel(id) = (obj.XcoordInVoxel(id)*obj.WcoordInVoxel(id) + deltaX)/(obj.WcoordInVoxel(id)+1);
+%                         
+%                         deltaY = endpoint(2)-obj.ws_y(id);
+%                         obj.YcoordInVoxel(id) = (obj.YcoordInVoxel(id)*obj.WcoordInVoxel(id) + deltaY)/(obj.WcoordInVoxel(id)+1);                        
+%                         
+% 
+%                         obj.WcoordInVoxel(id)= obj.WcoordInVoxel(id)+1;
                         
                         break;
                     end

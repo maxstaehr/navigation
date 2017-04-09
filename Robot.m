@@ -24,6 +24,13 @@ classdef Robot
           currentX = zeros(1,3);
           ANGLE = [];
           
+          SIH = [...
+                    -1 -1 ;
+                    1 -1;
+                    1 1;
+                    -1 1];
+           
+                    
           
           
     end
@@ -32,7 +39,7 @@ classdef Robot
         function obj = Robot(superSamplingFaktor)
             obj.frontScanner = S300(obj.scannerRes(1), obj.scannerRes(2));            
             obj.rearScanner = S300(obj.scannerRes(1), obj.scannerRes(2));           
-
+            superSamplingFaktor = 1;
             if superSamplingFaktor > 1
               da = obj.scannerRes(1)/superSamplingFaktor;
               obj.ANGLE = linspace(da, obj.scannerRes(1)-da, superSamplingFaktor);
@@ -172,6 +179,42 @@ classdef Robot
                 minV(row) = min(x);
             end                               
             dist = sum(minV)/N;
+        end
+        
+        function obj = setOtherRobotsPosition(obj, X)
+            
+            for i=1:size(X,1)
+                a = [1 1 pi/4]';
+                b = [1 1 pi/6]';
+
+                A = [...
+                        -1 -1 0;
+                        1 -1 0;
+                        1 1 0;
+                        -1 1 0;
+                        -1 -1 0;]';
+
+                A1 = bsxfun(@plus, rot2(a(3)) * A(1:2,:), a(1:2));
+                A1 = [A1; A(3,:)+a(3)];
+                
+                b = X(i,:);
+                Ainrobot = egoKompensatePunkte(b', [0 0 0],  A1');
+                
+                x_neu =X(i,:);
+                x_res = x_neu - x_alt;
+                x_temp = x_neu(1:2)';
+                T1 = bsxfun(@minus,Xin(:,1:2),x_temp');
+                Xout = rot2(-x_res(3))*T1';
+                Xout = Xout';
+                Xout = [Xout Xin(:,3)-x_res(3)];
+                
+
+                close all; figure; hold on; grid on;
+                line(A1(1,:), A1(2,:), 'Color', 'k');
+
+                A1 = bsxfun(@plus, rot2(b(3)) * Ainrobot(:,1:2)', b(1:2));
+                line(A1(1,:), A1(2,:), 'Color', 'r');
+            end
         end
         
     end

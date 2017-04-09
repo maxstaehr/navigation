@@ -5,7 +5,7 @@ classdef S300
     properties        
         A;
         D;
-        sigma =0;
+        sigma =0.05;
     end
     
     methods
