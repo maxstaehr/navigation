@@ -9,7 +9,7 @@ classdef PF < handle
         EST_1; %Estimate aus dem letzten Durchlauf
         iNG; %selected States aus dem letzen Durchlauf
         PRED;%aktueller Prädiktionsschritt
-        dt = 0.1;
+        dt = 0.01;
         sigmaWheel = [0.01 0 0]'; %delta Sigma pro Sekunde
         sigmaAccX = 0.01;
         sigmaOmega = 0.001;
@@ -31,15 +31,8 @@ classdef PF < handle
         
         Pw_imu_accx;
         Pw_imu_rot;
+        
         wIMU = 2;
-        
-        Pw_slam_x;
-        Pw_slam_y;
-        Pw_slam_theta;
-        wSLAM = 10;
-        
-        wRot = 2;
-
 
         
         weight;
@@ -266,47 +259,20 @@ classdef PF < handle
             ErrorT = (thetapos - T).^2;
             
             
-            varX = obj.sigmaPosX^2;
-            varY = obj.sigmaPosY^2;
-            varTheta = obj.sigmaPosTheta^2;
+            varAccX = obj.sigmaPosX^2;
+            varOmega = obj.sigmaPosY^2;
 
+            varOmega = obj.sigmaPosY^2;
+            P_accx = (1/sqrt(2*pi*varAccX)) * exp(-ErrorAccX ./(2*varAccX));
+            obj.Pw_imu_accx = normalizeP(P_accx);
             
-            P_pos_x = (1/sqrt(2*pi*varX)) * exp(-ErrorX ./(2*varX));
-            obj.Pw_slam_x = normalizeP(P_pos_x);
+            P_omega = (1/sqrt(2*pi*varOmega)) * exp(-ErrorRot ./(2*varOmega));
+            obj.Pw_imu_rot = normalizeP(P_omega);
             
-            P_pos_y = (1/sqrt(2*pi*varY)) * exp(-ErrorY ./(2*varY));
-            obj.Pw_slam_y = normalizeP(P_pos_y);
-            
-            P_pos_theta = (1/sqrt(2*pi*varTheta)) * exp(-ErrorT ./(2*varTheta));
-            obj.Pw_slam_theta = normalizeP(P_pos_theta);
             
         end
         
         function weightSlamMeasurement(obj, xpos, ypos, thetapos)
-            
-            %% Berechnung Fehler
-            X = obj.PRED(1,:);
-            Y = obj.PRED(2,:);
-            T = obj.PRED(3,:);
-            ErrorX = (xpos - X).^2;
-            ErrorY = (ypos - Y).^2;
-            ErrorT = (thetapos - T).^2;
-            
-            
-            varX = obj.sigmaPosX^2;
-            varY = obj.sigmaPosY^2;
-            varTheta = obj.sigmaPosTheta^2;
-
-            
-            P_pos_x = (1/sqrt(2*pi*varX)) * exp(-ErrorX ./(2*varX));
-            obj.Pw_slam_x = normalizeP(P_pos_x);
-            
-            P_pos_y = (1/sqrt(2*pi*varY)) * exp(-ErrorY ./(2*varY));
-            obj.Pw_slam_y = normalizeP(P_pos_y);
-            
-            P_pos_theta = (1/sqrt(2*pi*varTheta)) * exp(-ErrorT ./(2*varTheta));
-            obj.Pw_slam_theta = normalizeP(P_pos_theta);
-            
         end
         
         function weightKinexonMeasuremnt(obj, xpos, ypos, thetapos)
@@ -328,19 +294,15 @@ classdef PF < handle
         
         function fuseWeights(obj)
              obj.weight = obj.Pw_odo_trans + ...
-                          obj.wRot * obj.Pw_odo_rot + ...
-                          obj.wIMU * obj.Pw_imu_accx + ...
-                          obj.wRot * obj.wIMU * obj.Pw_imu_rot + ...
-                          obj.wSLAM * obj.Pw_slam_x + ...
-                          obj.wSLAM * obj.Pw_slam_y + ...
-                          obj.wRot * obj.wSLAM * obj.Pw_slam_theta;
+                          obj.wIMU * obj.Pw_odo_rot + ...
+                          obj.Pw_imu_accx + ...
+                          obj.wIMU * obj.Pw_imu_rot  ;
         end
 
         function step(obj, vtrans, vrot, accx, omega, pos)
             obj.predict(vtrans, vrot);
             obj.weightOdometrieMeasurement(vtrans, vrot);
             obj.weightInertialMeasurement(accx, omega);
-            obj.weightSlamMeasurement(pos(1), pos(2), pos(3));
             obj.fuseWeights();
             obj.select();
         end
