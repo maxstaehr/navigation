@@ -51,9 +51,9 @@ AccXRausch = AccX + 0*normrnd(0,sigmaAccX, 1, Nt);
 DRotIMURausch = DRot +1* normrnd(0,simgaGierrateIMU, 1, Nt);
 DRotOdoRausch = DRot + 1*normrnd(0,simgaGierrateOdo, 1, Nt);
 VxRausch = V+1* normrnd(0,sigmaVx, 1, Nt);
-XposRausch = Xpos +0* normrnd(0,sigmaPosX, 1, Nt);
-YposRausch = Ypos +0* normrnd(0,sigmaPosY, 1, Nt);
-WinkelRausch = Winkel +0* normrnd(0,sigmaPosTheta, 1, Nt);
+XposRausch = Xpos +1* normrnd(0,sigmaPosX, 1, Nt);
+YposRausch = Ypos +1* normrnd(0,sigmaPosY, 1, Nt);
+WinkelRausch = Winkel +1* normrnd(0,sigmaPosTheta, 1, Nt);
 
 
 
@@ -64,10 +64,10 @@ WinkelRausch = Winkel +0* normrnd(0,sigmaPosTheta, 1, Nt);
 % plot(Time, AccXRausch, 'og');
 % legend('Originial', 'Verrauscht');
 
-close all;
+
 figure; hold on;
 hpos = subplot(2,1,1); hold on; grid on;
-%plot(XposRausch, YposRausch, 'xr');
+plot(XposRausch, YposRausch, 'xr');
 plot(hpos, Xpos, Ypos, 'og');
 legend('Originial', 'Verrauscht');
 hparticle = subplot(2,1,2); hold on; grid on;
