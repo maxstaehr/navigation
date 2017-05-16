@@ -70,10 +70,10 @@ classdef Robot
             xr = [v2'  obj.currentX(3)+obj.frontScannerPosition(3)];                
             obj.frontScanner.plot(ax, xr);
             
-            v1 = rot2(obj.currentX(3)) *obj.rearScannerPosition(1:2)';
-            v2 = bsxfun(@plus, v1, obj.currentX(1:2));
-            xr = [v2'  obj.currentX(3)+obj.rearScannerPosition(3)];                 
-            obj.rearScanner.plot(ax, xr);
+%             v1 = rot2(obj.currentX(3)) *obj.rearScannerPosition(1:2)';
+%             v2 = bsxfun(@plus, v1, obj.currentX(1:2));
+%             xr = [v2'  obj.currentX(3)+obj.rearScannerPosition(3)];                 
+%             obj.rearScanner.plot(ax, xr);
         end
         
         function plot_local(obj, ax)
@@ -99,8 +99,8 @@ classdef Robot
             obj.rearScanner = obj.rearScanner.raytrace(env, xr);
         end
         
-        function obj = setDepth(depth)
-            obj.rearScanner.D = depth;
+        function obj = setDepth(obj, depth)
+            obj.frontScanner.D = depth;
         end
         
         function PCL = generateGlobalPCL(robot)
@@ -118,15 +118,15 @@ classdef Robot
                      index = index+1;
                 end
             end
-            At = robot.rearScanner.A + xr(3);
-            for i=1:length(At)
-                for j=1:length(robot.ANGLE)
-                    XPOS = robot.rearScanner.D(i)*cos(At(i)+robot.ANGLE(j)) + xr(1);
-                    YPOS = robot.rearScanner.D(i)*sin(At(i)+robot.ANGLE(j)) + xr(2);
-                     PCL(index, :) = [XPOS YPOS];
-                     index = index+1;
-                end
-            end
+%             At = robot.rearScanner.A + xr(3);
+%             for i=1:length(At)
+%                 for j=1:length(robot.ANGLE)
+%                     XPOS = robot.rearScanner.D(i)*cos(At(i)+robot.ANGLE(j)) + xr(1);
+%                     YPOS = robot.rearScanner.D(i)*sin(At(i)+robot.ANGLE(j)) + xr(2);
+%                      PCL(index, :) = [XPOS YPOS];
+%                      index = index+1;
+%                 end
+%             end
 
 %             At = robot.rearScanner.A + xr(3);
 %             XPOS = robot.rearScanner.D .*cos(At) + xr(1);

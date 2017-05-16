@@ -50,10 +50,10 @@ classdef PF < handle
         vrot1;
         accx1; 
         omega1;
-        
-        
-        
+                
         weight;
+        
+        pq = PositionQueue(100);
     end
     
     methods
@@ -370,13 +370,15 @@ classdef PF < handle
             end
             obj.CS = x_est;
             
+            obj.pq.add(x_est(1:3)', obj.lastTime);
+            
 %             [c ,idx] = max(obj.weight);
 %             obj.CS = obj.PRED(:,idx(1));
             
             
         end
         
-        function fuseWeights(obj)
+        function fuseWeightsSlam(obj)
 
              obj.weight = obj.Pw_odo_trans + ...
                           obj.wRot * obj.Pw_odo_rot + ...
@@ -426,9 +428,13 @@ classdef PF < handle
                 obj.omega1 = omega;
         end
 
-        function step(obj,vtransc, vrotc,  vtrans, vrot, accx, omega, imuTime,  pos, posTime)
+        function predictstep(obj,vtransc, vrotc, imuTime)
             obj.determineDT(imuTime);
             obj.predict(vtransc, vrotc);
+            obj.determineBestEst();
+        end
+        
+        function step(obj, vtrans, vrot, accx, omega,  pos, posTime)
             obj.weightOdometrieMeasurement(vtrans, vrot);
             obj.weightInertialMeasurement(accx, omega);
             obj.weightSlamMeasurement(pos(1), pos(2), pos(3));
@@ -437,9 +443,7 @@ classdef PF < handle
             obj.select();
         end
         
-        function stepMarker(obj,vtransc, vrotc,  vtrans, vrot, accx, omega, imuTime,  pos, posTime)
-            obj.determineDT(imuTime);
-            obj.predict(vtransc, vrotc);
+        function stepMarker(obj,vtrans, vrot, accx, omega, pos, posTime)
             obj.resetMarkerMeasurement(pos(1), pos(2), pos(3));
             obj.weightOdometrieMeasurement(vtrans, vrot);
             obj.weightInertialMeasurement(accx, omega);            
@@ -448,9 +452,17 @@ classdef PF < handle
             obj.select();            
         end
         
-        function stepIMU(obj,vtransc, vrotc,  vtrans, vrot, accx, omega, imuTime)
-            obj.determineDT(imuTime);
-            obj.predict(vtransc, vrotc);
+        
+        function stepSlam(obj,vtrans, vrot, accx, omega, pos, posTime)            
+            obj.weightSlamMeasurement(pos(1), pos(2), pos(3));
+            obj.weightOdometrieMeasurement(vtrans, vrot);
+            obj.weightInertialMeasurement(accx, omega);            
+            obj.fuseWeightsSlam();
+            obj.determineBestEst();
+            obj.select();            
+        end
+        
+        function stepIMU(obj,vtrans, vrot, accx, omega)
             obj.weightOdometrieMeasurement(vtrans, vrot);
             obj.weightInertialMeasurement(accx, omega);            
             obj.fuseWeightsIMU();

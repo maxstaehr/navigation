@@ -10,7 +10,7 @@ classdef S300
     
     methods
         function obj = S300(res, openangle)
-            N = openangle/res;
+            N = openangle/res+1;
             obj.A = linspace(0,openangle, N);            
             obj.D = zeros(1, N);           
         end

@@ -103,8 +103,10 @@ classdef GridMap
         function plotProbabilityMap(obj, ax)
             Z = zeros(1, obj.nx*obj.ny);
             for i=1:length(Z)
-                if  obj.B(i) > 0
+                if  obj.B(i) > 0 && obj.V(i) > 0
                     Z(i) = obj.B(i) / obj.V(i);
+                else
+                     Z(i) = 0;
                 end
             end
 %             Z(Z==0) = nan;
@@ -196,11 +198,15 @@ classdef GridMap
             yid = round(((o(2)-obj.ymin)/(obj.ymax-obj.ymin))*(obj.ny-1))+1;
             
             
-            
+            obj.V = max(obj.V-0.5, 0);
+            obj.B = max(obj.B-0.5, 0);
             
             for ray=1:size(PCL,1)                                            
-
+                if isnan(PCL(ray,1))
+                    continue;
+                end
                 
+                hit = false;
                 xidend = round(((PCL(ray,1)-obj.xmin)/(obj.xmax-obj.xmin))*(obj.nx-1))+1;
                 yidend = round(((PCL(ray,2)-obj.ymin)/(obj.ymax-obj.ymin))*(obj.ny-1))+1;                
                 
@@ -258,11 +264,16 @@ classdef GridMap
                     end
 
 
-                    id = double((x-1)*obj.ny + (y-1) +1);                    
-                    obj.V(id) = obj.V(id)+ 1;                                        
+                    id = double((x-1)*obj.ny + (y-1) +1);     
+                    if ~hit
+                        obj.V(id) = obj.V(id)+ 1;                                        
+                    else
+                        obj.V(id) = max(obj.V(id)- 0.0, 0);  
+                    end
+                    
                     if xidend == x && yidend == y
                         obj.B(id) = obj.B(id) + 1;
-                        
+                        hit = true;
 %                         
 %                         deltaX = endpoint(1)-obj.ws_x(id);
 %                         obj.XcoordInVoxel(id) = (obj.XcoordInVoxel(id)*obj.WcoordInVoxel(id) + deltaX)/(obj.WcoordInVoxel(id)+1);
@@ -273,7 +284,7 @@ classdef GridMap
 % 
 %                         obj.WcoordInVoxel(id)= obj.WcoordInVoxel(id)+1;
                         
-                        break;
+%                         break;
                     end
 
 
