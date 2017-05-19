@@ -14,55 +14,92 @@ classdef PF < handle
         
         dt = 0.01;
         sigmaWheel = [0.01 0 0]'; %delta Sigma 
+        %%
+        %Fehler IMU
         sigmaAccX = 0.01;
         sigmaOmega = 0.001;
+        %%
+        %Fehler Odometrie
         sigmaWheelOdo = 0.01;
         
-        sigmaPosX = 0.01;
-        sigmaPosY = 0.01;
-        sigmaPosTheta = deg2rad(1);
+        sigmaOFTrans = 0.01;
+        sigmaOFRot = 0.01;
         
+        %%
+        %Fehler SLAM
+        sigmaSLAMPosX = 0.01;
+        sigmaSLAMPosY = 0.01;
+        sigmaSLAMPosTheta = deg2rad(1);
+        
+        sigmaMarkerPosX = 0.01;
+        sigmaMarkerPosY = 0.01;
+        sigmaMarkerPosTheta = deg2rad(1);
+        
+        %% 
+        %Berechnet sich aus SigmaWheel
         sigmaRot;
         sigmaTrans;
         
         width = 0.525;
+        %% 
+        %Null Gewicht für interp1 streng monoton steigend
         w0 = 1e-7;
-        Pw_odo;
+        wRot = 1;
         
+        %Parameter Odometrie
+        wODO = 1;        
         Pw_odo_trans;
         Pw_odo_rot;
         
+        %Parameter Optical Flow
+        wOF = 1;        
+        Pw_of_trans;
+        Pw_of_rot;
+                
+        %Parameter Imu
         Pw_imu_accx;
         Pw_imu_rot;
         wIMU = 1;
         
+        %Parameter Slam
         Pw_slam_x;
         Pw_slam_y;
         Pw_slam_theta;
         wSLAM = 1;        
-        wRot = 1;
-
+        
+        %Parameter Marker
+        Pw_marker_x;
+        Pw_marker_y;
+        Pw_marker_theta;
+        wMARKER = 10;               
+        
+        % letzte IMU Zeit für Berechung Integral bei 
+        % nicht konstanter Aufrufzeit        
         lastTime;
         
+        %letzter ODO/IMU Werte für Durchschnittswert aus 
+        % letztem Intervall
         vtransc1;
         vrotc1;
         vtrans1;
         vrot1;
         accx1; 
         omega1;
-                
+
+        %resultulierende Gewichtung
         weight;
-        
-        pq = PositionQueue(100);
+                
     end
     
     methods
+        
         function obj = PF(startTime, pos)
             obj.EST = zeros(7,obj.nParticels);
             obj.EST_1 = zeros(7,obj.nParticels);
             obj.iNG = ones(1, obj.nParticels);
             obj.PRED = zeros(7,obj.nParticels);
             obj.CS = zeros(7,1);
+            
             obj.Pw_odo_trans = zeros(1,obj.nParticels);
             obj.Pw_odo_rot = zeros(1,obj.nParticels);
     
@@ -79,6 +116,36 @@ classdef PF < handle
             obj.resetMarkerMeasurement(pos(1), pos(2), pos(3));
  
         end
+        function new = copy(this)
+            % Instantiate new object of the same class.
+            new = PF(0, [0 0 0]);%feval(class(this));
+
+             % Copy all non-hidden properties.
+            p = properties(this);
+            for i = 1:length(p)
+            new.(p{i}) = this.(p{i});
+            end
+        end
+        
+        function zeroWeights(obj)            
+            obj.Pw_odo_trans = zeros(1,obj.nParticels);
+            obj.Pw_odo_rot = zeros(1,obj.nParticels);
+            
+            obj.Pw_of_trans = zeros(1,obj.nParticels);
+            obj.Pw_of_rot = zeros(1,obj.nParticels);
+    
+            obj.Pw_imu_accx = zeros(1,obj.nParticels);
+            obj.Pw_imu_rot = zeros(1,obj.nParticels);
+            
+            obj.Pw_slam_x = zeros(1,obj.nParticels);
+            obj.Pw_slam_y = zeros(1,obj.nParticels);
+            obj.Pw_slam_theta = zeros(1,obj.nParticels);
+        
+            obj.Pw_marker_x = zeros(1,obj.nParticels);
+            obj.Pw_marker_y = zeros(1,obj.nParticels);
+            obj.Pw_marker_theta = zeros(1,obj.nParticels);        
+        end
+        
         %% Prädiktion
         % Prädiziert den aktuellen Zustand aus dem aktuellen Estimate
         % cmdVelTrans = [vx accx jx]
@@ -212,42 +279,14 @@ classdef PF < handle
                 PR = P;    
             end
         end
-        
-
-%         
-%         function weightOdometrieMeasurement(obj, vtrans, vrot)
-%             %% Bestimme aktuelle Radgeschwindigkeit
-%             % Bestimmt die aktuelle Radgeschwindigkeit und vergleicht dann
-%             % linkes und rechtes Rad gegen die Schätzung
-%             velRotLinks = -0.5*vrot(1)*obj.width;
-%             velRotRechts = 0.5*vrot(1)*obj.width;
-%             velWheelLinks = vtrans(1) + velRotLinks;
-%             velWheelRechts = vtrans(1) + velRotRechts;
-%             
-%            
-%             velRotLinksEst = -0.5*obj.PRED(5,:)*obj.width;
-%             velRotRechtsEst = 0.5*obj.PRED(5,:)*obj.width;
-%             velWheelLinksEst = obj.PRED(4,:) + velRotLinksEst;
-%             velWheelRechtsEst = obj.PRED(4,:) + velRotRechtsEst;
-%             
-%             %% Berechnung Fehler
-%             Error = 0.5*((velWheelLinks - velWheelLinksEst).^2 + ...
-%                 (velWheelRechts -velWheelRechtsEst).^2 );
-%             
-%             
-%             varOdoTrans = obj.sigmaWheelOdo^2;
-%             P = (1/sqrt(2*pi*varOdoTrans)) * exp(-Error ./(2*varOdoTrans));
-%             obj.Pw_odo = normalizeP(P)+obj.w0;
-%     
-%         end
-        
+                
         function weightOdometrieMeasurement(obj, vtrans, vrot)
        
             
             %% Berechnung Fehler
             %sigmaRot, sigmaTrans
             varOdoTrans = obj.sigmaTrans^2;
-            varOdoRot = obj.sigmaTrans^2;
+            varOdoRot = obj.sigmaRot^2;
             
             ErrorTrans = (vtrans(1) - obj.PRED(4,:)).^2;
             ErrorRot = (vrot(1) - obj.PRED(5,:)).^2;
@@ -256,7 +295,26 @@ classdef PF < handle
             obj.Pw_odo_trans = normalizeP(P);
 
             P = (1/sqrt(2*pi*varOdoRot)) * exp(-ErrorRot ./(2*varOdoRot));
-            obj.Pw_imu_rot = normalizeP(P);
+            obj.Pw_odo_rot = normalizeP(P);
+            
+        end        
+        
+        function weightOFMeasurement(obj, vtrans, vrot)
+       
+            
+            %% Berechnung Fehler
+            %sigmaRot, sigmaTrans
+            varOFTrans = obj.sigmaOFTrans^2;
+            varOFRot = obj.sigmaOFTrans^2;
+            
+            ErrorTrans = (vtrans(1) - obj.PRED(4,:)).^2;
+            ErrorRot = (vrot(1) - obj.PRED(5,:)).^2;
+            
+            P = (1/sqrt(2*pi*varOFTrans)) * exp(-ErrorTrans ./(2*varOFTrans));
+            obj.Pw_of_trans = normalizeP(P);
+
+            P = (1/sqrt(2*pi*varOFRot)) * exp(-ErrorRot ./(2*varOFRot));
+            obj.Pw_of_rot = normalizeP(P);
             
         end        
         
@@ -289,19 +347,19 @@ classdef PF < handle
             ErrorT = (thetapos - T).^2;
             
             
-            varX = obj.sigmaPosX^2;
-            varY = obj.sigmaPosY^2;
-            varTheta = obj.sigmaPosTheta^2;
+            varX = obj.sigmaMarkerPosX^2;
+            varY = obj.sigmaMarkerPosY^2;
+            varTheta = obj.sigmaMarkerPosTheta^2;
 
             
             P_pos_x = (1/sqrt(2*pi*varX)) * exp(-ErrorX ./(2*varX));
-            obj.Pw_slam_x = normalizeP(P_pos_x);
+            obj.Pw_marker_x = normalizeP(P_pos_x);
             
             P_pos_y = (1/sqrt(2*pi*varY)) * exp(-ErrorY ./(2*varY));
-            obj.Pw_slam_y = normalizeP(P_pos_y);
+            obj.Pw_marker_y = normalizeP(P_pos_y);
             
             P_pos_theta = (1/sqrt(2*pi*varTheta)) * exp(-ErrorT ./(2*varTheta));
-            obj.Pw_slam_theta = normalizeP(P_pos_theta);
+            obj.Pw_marker_theta = normalizeP(P_pos_theta);
             
         end
         
@@ -316,9 +374,9 @@ classdef PF < handle
             ErrorT = (thetapos - T).^2;
             
             
-            varX = obj.sigmaPosX^2;
-            varY = obj.sigmaPosY^2;
-            varTheta = obj.sigmaPosTheta^2;
+            varX = obj.sigmaSLAMPosX^2;
+            varY = obj.sigmaSLAMPosY^2;
+            varTheta = obj.sigmaSLAMPosTheta^2;
 
             
             P_pos_x = (1/sqrt(2*pi*varX)) * exp(-ErrorX ./(2*varX));
@@ -345,10 +403,7 @@ classdef PF < handle
 
             
         end        
-        
-        function weightKinexonMeasuremnt(obj, xpos, ypos, thetapos)
-        end
-        
+                
         function select(obj)
             W = obj.weight +obj.w0;
             CDF = cumsum(W)/sum(W);
@@ -368,37 +423,26 @@ classdef PF < handle
             for i = 1 : obj.nParticels
                 x_est = x_est + obj.weight (i) *obj.PRED(:,i);
             end
-            obj.CS = x_est;
-            
-            obj.pq.add(x_est(1:3)', obj.lastTime);
-            
-%             [c ,idx] = max(obj.weight);
-%             obj.CS = obj.PRED(:,idx(1));
-            
-            
+            obj.CS = x_est;           
         end
         
-        function fuseWeightsSlam(obj)
-
-             obj.weight = obj.Pw_odo_trans + ...
-                          obj.wRot * obj.Pw_odo_rot + ...
-                          obj.wRot * obj.wIMU * obj.Pw_imu_rot + ...
-                          obj.wIMU * obj.Pw_imu_accx + ...
-                          obj.wSLAM * obj.Pw_slam_x + ...
-                          obj.wSLAM * obj.Pw_slam_y + ...
-                          obj.wRot * obj.wSLAM * obj.Pw_slam_theta;
-             obj.weight = obj.weight ./ sum(obj.weight);
+        function fuseWeights(obj)
+             obj.weight = ...
+                               obj.wODO * obj.Pw_odo_trans + ...
+              obj.wRot * obj.wODO * obj.Pw_odo_rot + ...
+                               obj.wOF * obj.Pw_of_trans + ...
+              obj.wRot * obj.wOF * obj.Pw_of_rot + ...                
+              obj.wRot * obj.wIMU * obj.Pw_imu_rot + ...
+                              obj.wIMU * obj.Pw_imu_accx + ...
+                              obj.wSLAM * obj.Pw_slam_x + ...
+                              obj.wSLAM * obj.Pw_slam_y + ...
+              obj.wRot * obj.wSLAM * obj.Pw_slam_theta + ...      
+                              obj.wMARKER * obj.Pw_marker_x + ...
+                              obj.wMARKER * obj.Pw_marker_y + ...
+              obj.wRot * obj.wMARKER * obj.Pw_marker_theta;
+              obj.weight = obj.weight ./ sum(obj.weight);
         end
-        
-        function fuseWeightsIMU(obj)
-        
-             obj.weight = obj.Pw_odo_trans + ...
-                          obj.wIMU * obj.Pw_imu_accx + ...    
-                          obj.wRot * obj.Pw_odo_rot + ...
-                          obj.wRot * obj.wIMU * obj.Pw_imu_rot;
-             obj.weight = obj.weight ./ sum(obj.weight);
-        end
-        
+                
         function determineDT(obj, imuTime)
             obj.dt = imuTime - obj.lastTime;
             obj.lastTime = imuTime;
@@ -432,43 +476,90 @@ classdef PF < handle
             obj.determineDT(imuTime);
             obj.predict(vtransc, vrotc);
             obj.determineBestEst();
-        end
-        
-        function step(obj, vtrans, vrot, accx, omega,  pos, posTime)
-            obj.weightOdometrieMeasurement(vtrans, vrot);
-            obj.weightInertialMeasurement(accx, omega);
-            obj.weightSlamMeasurement(pos(1), pos(2), pos(3));
-            obj.fuseWeights();
-            obj.determineBestEst();
-            obj.select();
-        end
-        
-        function stepMarker(obj,vtrans, vrot, accx, omega, pos, posTime)
-            obj.resetMarkerMeasurement(pos(1), pos(2), pos(3));
-            obj.weightOdometrieMeasurement(vtrans, vrot);
-            obj.weightInertialMeasurement(accx, omega);            
-            obj.fuseWeightsIMU();
-            obj.determineBestEst();
-            obj.select();            
-        end
-        
-        
-        function stepSlam(obj,vtrans, vrot, accx, omega, pos, posTime)            
-            obj.weightSlamMeasurement(pos(1), pos(2), pos(3));
-            obj.weightOdometrieMeasurement(vtrans, vrot);
-            obj.weightInertialMeasurement(accx, omega);            
-            obj.fuseWeightsSlam();
-            obj.determineBestEst();
-            obj.select();            
+            obj.zeroWeights();
         end
         
         function stepIMU(obj,vtrans, vrot, accx, omega)
             obj.weightOdometrieMeasurement(vtrans, vrot);
             obj.weightInertialMeasurement(accx, omega);            
-            obj.fuseWeightsIMU();
+            obj.fuseWeights();
             obj.determineBestEst();
             obj.select();
         end
+                
+        
+%%asynchronious functions  single modality
+        function stepMarker(obj,vtrans, vrot, accx, omega, pos)
+            obj.weightMarkerMeasurement(pos(1), pos(2), pos(3));
+            obj.weightOdometrieMeasurement(vtrans, vrot);
+            obj.weightInertialMeasurement(accx, omega);            
+            obj.fuseWeights();
+            obj.determineBestEst();
+            obj.select();            
+        end
+                
+        function stepSlam(obj,vtrans, vrot, accx, omega, pos)            
+            obj.weightSlamMeasurement(pos(1), pos(2), pos(3));
+            obj.weightOdometrieMeasurement(vtrans, vrot);
+            obj.weightInertialMeasurement(accx, omega);            
+            obj.fuseWeights();
+            obj.determineBestEst();
+            obj.select();            
+        end
+        
+        function stepOF(obj,vtrans, vrot, accx, omega, vtransof, vrotof)
+            obj.weightOFMeasurement(vtransof, vrotof);
+            obj.weightOdometrieMeasurement(vtrans, vrot);
+            obj.weightInertialMeasurement(accx, omega);            
+            obj.fuseWeights();
+            obj.determineBestEst();
+            obj.select();            
+        end        
+        
+%%asynchronious functions  2 modalities
+
+        function stepMarkerSlam(obj,vtrans, vrot, accx, omega, pos1, pos2)
+            obj.weightMarkerMeasurement(pos1(1), pos1(2), pos1(3));
+            obj.weightSlamMeasurement(pos2(1), pos2(2), pos2(3));
+            obj.weightOdometrieMeasurement(vtrans, vrot);
+            obj.weightInertialMeasurement(accx, omega);            
+            obj.fuseWeights();
+            obj.determineBestEst();
+            obj.select();            
+        end
+        
+        function stepMarkerOF(obj,vtrans, vrot, accx, omega, pos,  vtransof, vrotof)
+            obj.weightMarkerMeasurement(pos(1), pos(2), pos(3));
+            obj.weightOFMeasurement(vtransof, vrotof);
+            obj.weightOdometrieMeasurement(vtrans, vrot);
+            obj.weightInertialMeasurement(accx, omega);            
+            obj.fuseWeights();
+            obj.determineBestEst();
+            obj.select();            
+        end
+                
+        function stepSlamOF(obj,vtrans, vrot, accx, omega, pos, vtransof, vrotof)         
+            obj.weightOFMeasurement(vtransof, vrotof);
+            obj.weightSlamMeasurement(pos(1), pos(2), pos(3));
+            obj.weightOdometrieMeasurement(vtrans, vrot);
+            obj.weightInertialMeasurement(accx, omega);            
+            obj.fuseWeights();
+            obj.determineBestEst();
+            obj.select();            
+        end
+%%asynchronious functions  3 modalities        
+        function stepMarkerSlamOF(obj,vtrans, vrot, accx, omega,pos1, pos2, vtransof, vrotof)
+            obj.weightMarkerMeasurement(pos1(1), pos1(2), pos1(3));
+            obj.weightSlamMeasurement(pos2(1), pos2(2), pos2(3));
+            obj.weightOFMeasurement(vtransof, vrotof);
+            obj.weightOdometrieMeasurement(vtrans, vrot);
+            obj.weightInertialMeasurement(accx, omega);            
+            obj.fuseWeights();
+            obj.determineBestEst();
+            obj.select();            
+        end   
+        
+
     end
     
 end
