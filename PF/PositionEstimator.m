@@ -12,10 +12,14 @@ classdef PositionEstimator < handle
         currentState;
         indexRecalculate;
         
+        %% CMD Delay
+        % Bestimmt den Delay zwischen der Pos
+        cmdDelay = 6;
+        
     end
     
     methods
-        function obj = PositionEstimator(nStates, startTime, pos)
+        function obj = PositionEstimator(nStates, pos)
             obj.listOfStates = cell(1,nStates);            
             obj.listOfStatePredicts = cell(1,nStates);
             
@@ -26,29 +30,19 @@ classdef PositionEstimator < handle
             
             obj.indexRecalculate = nStates;
             
-            for i=1:nStates
-                pf = PF(startTime, pos);
-                obj.listOfStates{i} = pf;
-            end
-            obj.currentState = pf;
+
+            pf = PF( pos);
+            obj.currentState = pf.copy();
+
         end
         
-        function insertState(obj, state)            
-            ll = obj.listOfStates(2:end);
-            ll{end+1} = state;
-            obj.listOfStates = ll;
-        end
                
         function insertStatePredict(obj, state)            
-            ll = [obj.listOfStatePredicts(2:end) state];
+             ll = obj.listOfStatePredicts(2:end);
+            ll{end+1} = state;
             obj.listOfStatePredicts = ll;
-        end        
-        
-        function insertStateIMU(obj, state)            
-            ll = [obj.listOfIMU(2:end) state];
-            obj.listOfIMU = ll;
             
-            %% verschieben der anderen eingangsdaten
+             %% verschieben der anderen eingangsdaten
             ll = obj.listOfSlam(2:end);
             ll{end+1} = {};
             obj.listOfSlam = ll;
@@ -60,28 +54,51 @@ classdef PositionEstimator < handle
             ll = obj.listOfMarker(2:end);
             ll{end+1} = {};
             obj.listOfMarker = ll;
+                        
+            ll = obj.listOfStates(2:end);
+            ll{end+1} = {};
+            obj.listOfStates = ll;
 
+        end        
+        
+        function insertStateIMU(obj, state)            
+            ll = [obj.listOfIMU(2:end) state];
+            obj.listOfIMU = ll;           
         end           
+        
+        function [vtrans, vrot] = convertDistance2Velocity(obj, distL, distR, imuTime)            
+            lastPredict = obj.listOfIMU{end-1};
+            if ~isempty(lastPredict)
+                dt = imuTime - lastPredict.imuTime;
+                vL =  (distL - lastPredict.distL)/dt;
+                vR =  (distR - lastPredict.distR)/dt;            
+                vrot = (vR - vL)/obj.currentState.width;
+                vtrans = (vR + vL)/2;     
+            else
+                vrot = 0;
+                vtrans = 0;
+            end
+        end
         
         
          function predictstep(obj,vtransc, vrotc, imuTime)             
-             obj.insertStatePredict(struct('vtransc', vtransc, 'vrotc', vrotc, 'imuTime', imuTime));
-             obj.currentState.predictstep(vtransc, vrotc, imuTime);
+             obj.insertStatePredict(struct('vtransc', vtransc, 'vrotc', vrotc,  'imuTime', imuTime));
+%              obj.currentState.predictstep(vtransc, vrotc, imuTime);
          end
             
 %%
 % step Funktionen
-         function stepIMU(obj,vtrans, vrot, accx, omega)
-             obj.indexRecalculate = length(obj.listOfStates);
-             obj.insertStateIMU(struct('vtrans', vtrans, 'vrot', vrot, 'accx', accx, 'omega', omega));
-             obj.currentState.stepIMU(vtrans, vrot, accx, omega);             
-             obj.insertState(obj.currentState.copy());             
-         end
          
-         function stepIMUAsynchron(obj,vtrans, vrot, accx, omega)
+         function stepIMUVel(obj,vtrans, vrot, accx, omega)
              obj.indexRecalculate = length(obj.listOfStates);
              obj.insertStateIMU(struct('vtrans', vtrans, 'vrot', vrot, 'accx', accx, 'omega', omega));                         
          end         
+         
+         function stepIMUDist(obj, distL, distR, accx, omega, imuTime)
+              [vtrans, vrot] = obj.convertDistance2Velocity( distL, distR, imuTime);
+             obj.indexRecalculate = length(obj.listOfStates);             
+             obj.insertStateIMU(struct('vtrans', vtrans, 'vrot', vrot, 'accx', accx, 'omega', omega, 'distL', distL, 'distR', distR, 'imuTime', imuTime));                         
+         end             
          
          function stepSlam(obj, pos, posTime)    
              %% Einhängen der Daten
@@ -89,8 +106,10 @@ classdef PositionEstimator < handle
              % und hänge die Positionsdaten ein
              % setze minmale Index ab dem erneuert werden muss
              for i=2:length(obj.listOfIMU)
-                 if obj.listOfStates{i-1}.lastTime <= posTime && ...
-                    obj.listOfStates{i}.lastTime > posTime
+                 if ~isempty(obj.listOfStatePredicts{i-1})  && ...
+                     ~isempty(obj.listOfStatePredicts{i}) && ...
+                     obj.listOfStatePredicts{i-1}.imuTime < posTime && ...
+                    obj.listOfStatePredicts{i}.imuTime >= posTime
                     %Zeitunkt gefunden, hänge Daten ein
                     obj.listOfSlam{i} = struct('pos', pos);
                     obj.indexRecalculate = min([obj.indexRecalculate i]);
@@ -104,8 +123,10 @@ classdef PositionEstimator < handle
              % und hänge die Positionsdaten ein
              % setze minmale Index ab dem erneuert werden muss
              for i=2:length(obj.listOfIMU)
-                 if obj.listOfStates{i-1}.lastTime <= posTime && ...
-                    obj.listOfStates{i}.lastTime > posTime
+                 if ~isempty(obj.listOfStatePredicts{i-1})  && ...
+                     ~isempty(obj.listOfStatePredicts{i}) && ...
+                     obj.listOfStatePredicts{i-1}.imuTime < posTime && ...
+                    obj.listOfStatePredicts{i}.imuTime >= posTime
                     %Zeitunkt gefunden, hänge Daten ein
                     obj.listOfMarker{i} = struct('pos', pos);
                     obj.indexRecalculate = min([obj.indexRecalculate i]);
@@ -119,8 +140,10 @@ classdef PositionEstimator < handle
              % und hänge die Positionsdaten ein
              % setze minmale Index ab dem erneuert werden muss
              for i=2:length(obj.listOfIMU)
-                 if obj.listOfStates{i-1}.lastTime <= posTime && ...
-                    obj.listOfStates{i}.lastTime > posTime
+                 if ~isempty(obj.listOfStatePredicts{i-1})  && ...
+                     ~isempty(obj.listOfStatePredicts{i}) && ...
+                     obj.listOfStatePredicts{i-1}.imuTime < posTime && ...
+                    obj.listOfStatePredicts{i}.imuTime >= posTime
                     %Zeitunkt gefunden, hänge Daten ein
                     obj.listOfOF{i} = struct('vtrans', vtrans, 'vrot', vrot);
                     obj.indexRecalculate = min([obj.indexRecalculate i]);
@@ -129,12 +152,29 @@ classdef PositionEstimator < handle
          end         
          
          function recalculate(obj)
-             state = copy(obj.listOfStates{obj.indexRecalculate-1});
+             s = obj.listOfStates{obj.indexRecalculate-1};
+             if ~isempty(s)
+                 state = copy(obj.listOfStates{obj.indexRecalculate-1});
+             else
+                state = copy(obj.currentState);
+             end
+             
              for i=obj.indexRecalculate:length(obj.listOfOF)
                  %% Bestimmen der Fälle
                  %Welcher Eingansdaten lagen zu dem Datum in der
                  %Vergangenheit an?
-                 pred = obj.listOfStatePredicts{i};
+                 % Delay des CMD 
+                 %finde nicht leeren Prädiktionsschritt beim Befüllen
+                 pred = obj.listOfStatePredicts{i - obj.cmdDelay};
+                 if isempty(pred)
+                     for j = i - obj.cmdDelay:length(obj.listOfStatePredicts)
+                        pred = obj.listOfStatePredicts{i};
+                        if ~isempty(pred)
+                            break;
+                        end
+                     end
+                 end
+                 
                  imu = obj.listOfIMU{i};
                  
                  hasO = ~isempty(obj.listOfOF{i});

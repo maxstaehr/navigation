@@ -13,11 +13,11 @@ classdef PF < handle
         CS; 
         
         dt = 0.01;
-        sigmaWheel = [0.01 0 0]'; %delta Sigma 
+        sigmaWheel = [1e-2 0 0]'; %delta Sigma 
         %%
         %Fehler IMU
-        sigmaAccX = 0.01;
-        sigmaOmega = 0.001;
+        sigmaAccX = 0.0194/6;
+        sigmaOmega = 0.3/6 * pi/180;        
         %%
         %Fehler Odometrie
         sigmaWheelOdo = 0.01;
@@ -40,7 +40,8 @@ classdef PF < handle
         sigmaRot;
         sigmaTrans;
         
-        width = 0.525;
+        %width =  1.006257921576827* 0.525;
+        width =  0.525;
         %% 
         %Null Gewicht für interp1 streng monoton steigend
         w0 = 1e-7;
@@ -71,20 +72,19 @@ classdef PF < handle
         Pw_marker_x;
         Pw_marker_y;
         Pw_marker_theta;
-        wMARKER = 10;               
+        wMARKER = 1e8;               
         
         % letzte IMU Zeit für Berechung Integral bei 
         % nicht konstanter Aufrufzeit        
-        lastTime;
+        lastTime= -1;
         
         %letzter ODO/IMU Werte für Durchschnittswert aus 
         % letztem Intervall
         vtransc1;
         vrotc1;
-        vtrans1;
-        vrot1;
-        accx1; 
-        omega1;
+        %% aktuelle varianz
+        varianz;
+
 
         %resultulierende Gewichtung
         weight;
@@ -93,7 +93,7 @@ classdef PF < handle
     
     methods
         
-        function obj = PF(startTime, pos)
+        function obj = PF(pos)
             obj.EST = zeros(7,obj.nParticels);
             obj.EST_1 = zeros(7,obj.nParticels);
             obj.iNG = ones(1, obj.nParticels);
@@ -106,8 +106,8 @@ classdef PF < handle
             obj.Pw_imu_accx = zeros(1,obj.nParticels);
             obj.Pw_imu_rot = zeros(1,obj.nParticels);
             
-            obj.weight = zeros(1,obj.nParticels);
-            obj.lastTime = startTime;
+            obj.weight = ones(1,obj.nParticels);
+           
             
             %% Berechnung Standardabweichung Rotation und Translatorik
             % DESCRIPTIVE TEXT
@@ -118,7 +118,7 @@ classdef PF < handle
         end
         function new = copy(this)
             % Instantiate new object of the same class.
-            new = PF(0, [0 0 0]);%feval(class(this));
+            new = PF( [0 0 0]);%feval(class(this));
 
              % Copy all non-hidden properties.
             p = properties(this);
@@ -152,6 +152,7 @@ classdef PF < handle
         % cmdVelRot = [vrot accrot]
         
         function predict(obj, cmdVelTrans, cmdVelRot)
+            [cmdVelTrans, cmdVelRot] = determineDeltaState(obj, cmdVelTrans, cmdVelRot);
             %% Berechnung von Einzelradgrößen
             % Als erstes muss aus der aktuellen rotatorischen und
             % translatorischen Geschwindigkeit die Radgeschwindigkeit
@@ -167,11 +168,17 @@ classdef PF < handle
             Nlinks = bsxfun(@times, obj.sigmaWheel, randn(3, obj.nParticels));
             Nrechts = bsxfun(@times, obj.sigmaWheel, randn(3, obj.nParticels));
             
+%             Nlinks = bsxfun(@times, obj.sigmaWheel, randn(3, obj.nParticels)-0.5);
+%             Nrechts = bsxfun(@times, obj.sigmaWheel, randn(3, obj.nParticels)-0.5);
+            
             velWheelLinks = bsxfun(@plus, cmdVelWheelLinks, Nlinks);
             velWheelRechts = bsxfun(@plus, cmdVelWheelRechts, Nrechts);
             
             cmdVelTransNoise = (velWheelLinks + velWheelRechts)/2;
             cmdVelRotNoise = (velWheelRechts - velWheelLinks)/obj.width;
+            
+%             cmdVelTransNoise = bsxfun(@times, cmdVelTrans, ones(3,  obj.nParticels));
+%             cmdVelRotNoise = bsxfun(@times, [cmdVelRot; 0], ones(3,  obj.nParticels));
             
             P = obj.PRED;
             
@@ -269,7 +276,7 @@ classdef PF < handle
 %             legend('EST_1', 'PRED', 'EST');
 %             fprintf('EST1 %f\tEST %f\tPRED %f\n', var1, var2, var3);
         end
-        function [ PR ] = normalizeP( P )
+        function [ PR ] = normalizeP(obj, P )
             %UNTITLED7 Summary of this function goes here
             %   Detailed explanation goes here
             sumP = sum(P);
@@ -290,6 +297,9 @@ classdef PF < handle
             
             ErrorTrans = (vtrans(1) - obj.PRED(4,:)).^2;
             ErrorRot = (vrot(1) - obj.PRED(5,:)).^2;
+            
+%             ErrorTrans = (0*obj.PRED(4,:)).^2;
+%             ErrorRot = (0* obj.PRED(5,:)).^2;
             
             P = (1/sqrt(2*pi*varOdoTrans)) * exp(-ErrorTrans ./(2*varOdoTrans));
             obj.Pw_odo_trans = normalizeP(P);
@@ -337,29 +347,32 @@ classdef PF < handle
         end
         
         function weightMarkerMeasurement(obj, xpos, ypos, thetapos)
+              obj.resetMarkerMeasurement(xpos, ypos, thetapos);
             
-            %% Berechnung Fehler
-            X = obj.PRED(1,:);
-            Y = obj.PRED(2,:);
-            T = obj.PRED(3,:);
-            ErrorX = (xpos - X).^2;
-            ErrorY = (ypos - Y).^2;
-            ErrorT = (thetapos - T).^2;
-            
-            
-            varX = obj.sigmaMarkerPosX^2;
-            varY = obj.sigmaMarkerPosY^2;
-            varTheta = obj.sigmaMarkerPosTheta^2;
-
-            
-            P_pos_x = (1/sqrt(2*pi*varX)) * exp(-ErrorX ./(2*varX));
-            obj.Pw_marker_x = normalizeP(P_pos_x);
-            
-            P_pos_y = (1/sqrt(2*pi*varY)) * exp(-ErrorY ./(2*varY));
-            obj.Pw_marker_y = normalizeP(P_pos_y);
-            
-            P_pos_theta = (1/sqrt(2*pi*varTheta)) * exp(-ErrorT ./(2*varTheta));
-            obj.Pw_marker_theta = normalizeP(P_pos_theta);
+%             Berechnung Fehler
+%             X = obj.PRED(1,:);
+%             Y = obj.PRED(2,:);
+%             T = obj.PRED(3,:);
+%             ErrorX = (xpos - X).^2;
+%             ErrorY = (ypos - Y).^2;
+%             ErrorT = (thetapos - T).^2;
+%             
+%             
+%             varX = obj.sigmaMarkerPosX^2;
+%             varY = obj.sigmaMarkerPosY^2;
+%             varTheta = obj.sigmaMarkerPosTheta^2;
+%             
+%                    
+% 
+%             
+%             P_pos_x = (1/sqrt(2*pi*varX)) * exp(-ErrorX ./(2*varX));
+%             obj.Pw_marker_x = normalizeP(P_pos_x);
+%             
+%             P_pos_y = (1/sqrt(2*pi*varY)) * exp(-ErrorY ./(2*varY));
+%             obj.Pw_marker_y = normalizeP(P_pos_y);
+%             
+%             P_pos_theta = (1/sqrt(2*pi*varTheta)) * exp(-ErrorT ./(2*varTheta));
+%             obj.Pw_marker_theta = normalizeP(P_pos_theta);
             
         end
         
@@ -380,13 +393,13 @@ classdef PF < handle
 
             
             P_pos_x = (1/sqrt(2*pi*varX)) * exp(-ErrorX ./(2*varX));
-            obj.Pw_slam_x = normalizeP(P_pos_x);
+            obj.Pw_slam_x = obj.normalizeP(P_pos_x);
             
             P_pos_y = (1/sqrt(2*pi*varY)) * exp(-ErrorY ./(2*varY));
-            obj.Pw_slam_y = normalizeP(P_pos_y);
+            obj.Pw_slam_y = obj.normalizeP(P_pos_y);
             
             P_pos_theta = (1/sqrt(2*pi*varTheta)) * exp(-ErrorT ./(2*varTheta));
-            obj.Pw_slam_theta = normalizeP(P_pos_theta);
+            obj.Pw_slam_theta = obj.normalizeP(P_pos_theta);
             
         end
         
@@ -400,6 +413,15 @@ classdef PF < handle
             obj.EST(1,:) = xpos;
             obj.EST(2,:) = ypos;
             obj.EST(3,:) = thetapos;
+            
+            obj.EST_1(1,:) = xpos;
+            obj.EST_1(2,:) = ypos;
+            obj.EST_1(3,:) = thetapos;
+            
+%             obj.CS(1) = xpos;
+%             obj.CS(2) = ypos;
+%             obj.CS(3) = thetapos;
+            
 
             
         end        
@@ -407,29 +429,35 @@ classdef PF < handle
         function select(obj)
             W = obj.weight +obj.w0;
             CDF = cumsum(W)/sum(W);
-            iSelect  = rand(obj.nParticels,1);
+            if obj.nParticels > 1
+                iSelect  = rand(obj.nParticels,1);
 
-            % find the particle that corresponds to each y value (just a look up)
-            iNextGeneration = interp1(CDF, 1:obj.nParticels, iSelect, 'nearest', 'extrap');
+                % find the particle that corresponds to each y value (just a look up)
+                iNextGeneration = interp1(CDF, 1:obj.nParticels, iSelect, 'nearest', 'extrap');                
+            else
+                iNextGeneration = [1];
+            end
             obj.iNG = iNextGeneration;
-
             % copy selected particles for next generation..
             obj.EST_1 = obj.EST;
             obj.EST = obj.PRED(:,iNextGeneration);
         end
         
-        function determineBestEst(obj)            
+        function determineBestEst(obj)          
+            w = obj.normalizeP(obj.weight);
             x_est = 0*obj.CS;
             for i = 1 : obj.nParticels
-                x_est = x_est + obj.weight (i) *obj.PRED(:,i);
-            end
+                x_est = x_est + w(i) *obj.PRED(:,i);
+            end                        
+             v1 = var(obj.PRED' , obj.weight);
+             obj.varianz  = v1';
             obj.CS = x_est;           
         end
         
         function fuseWeights(obj)
              obj.weight = ...
                                obj.wODO * obj.Pw_odo_trans + ...
-              obj.wRot * obj.wODO * obj.Pw_odo_rot + ...
+                              obj.wRot * obj.wODO * obj.Pw_odo_rot + ...                               
                                obj.wOF * obj.Pw_of_trans + ...
               obj.wRot * obj.wOF * obj.Pw_of_rot + ...                
               obj.wRot * obj.wIMU * obj.Pw_imu_rot + ...
@@ -440,36 +468,28 @@ classdef PF < handle
                               obj.wMARKER * obj.Pw_marker_x + ...
                               obj.wMARKER * obj.Pw_marker_y + ...
               obj.wRot * obj.wMARKER * obj.Pw_marker_theta;
-              obj.weight = obj.weight ./ sum(obj.weight);
+              obj.weight = obj.normalizeP(obj.weight);              
         end
                 
         function determineDT(obj, imuTime)
-            obj.dt = imuTime - obj.lastTime;
-            obj.lastTime = imuTime;
+            if obj.lastTime < 0
+                obj.lastTime = imuTime;
+            else
+                obj.dt = imuTime - obj.lastTime;
+                obj.lastTime = imuTime;
+            end
         end
         
-        function [vtransc2, vrotc2,  vtrans2, vrot2, accx2, omega2] = determineDeltaState(obj, vtransc, vrotc,  vtrans, vrot, accx, omega)
-                if ~isempty(obj.transc1)
+        function [vtransc2, vrotc2] = determineDeltaState(obj, vtransc, vrotc)
+                if ~isempty(obj.vtransc1)
                     vtransc2 = (obj.vtransc1 + vtransc) / 2;
                     vrotc2 = (obj.vrotc1+vrotc) / 2;
-                    vtrans2= (obj.vtrans1+vtrans) / 2;
-                    vrot2 = (obj.vrot1+vrot) / 2;
-                    accx2 = (obj.accx1+accx) / 2;
-                    omega2 = (obj.omega1+omega) / 2;      
                 else
                     vtransc2 = vtransc;
-                    vrotc2 = vrotc;
-                    vtrans2 = vtrans;
-                    vrot2 = vrot;
-                    accx2 = accx;
-                    omega2 = omega;                    
+                    vrotc2 = vrotc;           
                 end
                 obj.vtransc1 = vtransc;
                 obj.vrotc1 = vrotc;
-                obj.vtrans1 = vtrans;
-                obj.vrot1 = vrot;
-                obj.accx1 = accx;
-                obj.omega1 = omega;
         end
 
         function predictstep(obj,vtransc, vrotc, imuTime)
@@ -490,7 +510,7 @@ classdef PF < handle
         
 %%asynchronious functions  single modality
         function stepMarker(obj,vtrans, vrot, accx, omega, pos)
-            obj.weightMarkerMeasurement(pos(1), pos(2), pos(3));
+             obj.weightMarkerMeasurement(pos(1), pos(2), pos(3));
             obj.weightOdometrieMeasurement(vtrans, vrot);
             obj.weightInertialMeasurement(accx, omega);            
             obj.fuseWeights();

@@ -18,10 +18,6 @@ vrreal = vrReal;
 velTime = timeVelocity;
 scanTime = time;
 
-minTime = min([min(posTime) min(velTime) min(scanTime)]);
-posTime = posTime - minTime;
-velTime = velTime - minTime;
-scanTime = scanTime - minTime;
 
 SCAN = data;
 
@@ -37,7 +33,7 @@ for i=2:length(ax)
     ax(i) = (vtransreal(i) - vtransreal(i-1))/(velTime(i) - velTime(i-1));  
 %     ax(i) = (vtranscmd(i) - vtranscmd(i-9))/(9*0.01);  
 end
-save('input.mat', 'vrotreal', 'vtransreal', 'vrotcmd', 'vtranscmd', 'GP', ...
+save('input2.mat', 'vrotreal', 'vtransreal', 'vrotcmd', 'vtranscmd', 'GP', ...
     'ax', 'velTime', 'posTime', 'TR', 'SCAN', 'scanTime');
 
 figure; hold on; grid on;
